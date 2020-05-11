@@ -162,6 +162,7 @@ include_directories(
    scripts/autorun_node.py
    scripts/manipulator_node.py
    scripts/sensor_node.py
+   scripts/odometry_node.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 
