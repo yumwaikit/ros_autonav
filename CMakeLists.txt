@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(ros_autorun_test)
+project(ros_autonav)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -160,6 +160,7 @@ include_directories(
 ## in contrast to setup.py, you can choose the destination
  install(PROGRAMS
    scripts/autorun_node.py
+   scripts/manipulator_node.py
    scripts/sensor_node.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )

@@ -2,6 +2,7 @@
 
 import math
 import rospy
+from std_msgs.msg import Float64
 from std_msgs.msg import Float64MultiArray
 
 def manipulator_node():
@@ -10,9 +11,9 @@ def manipulator_node():
     rospy.init_node('manipulator_node')
     r = rospy.Rate(1)
 
-    while not rospy.is_shutdown():
+    for i in range(3):
         joints = Float64MultiArray()
-        joints.data = [0.0, 0.0, 0.0, -math.pi / 2, 0.0]
+        joints.data = [1.0, 0.0, -math.pi / 2, math.pi * 3 / 8, math.pi / 4]
         gripper = Float64MultiArray()
         gripper.data = [0.0]
         joint_publisher.publish(joints)
