@@ -163,6 +163,7 @@ include_directories(
    scripts/manipulator_node.py
    scripts/sensor_node.py
    scripts/odometry_node.py
+   scripts/realsense_node.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 
