@@ -2,6 +2,7 @@
 
 import math
 import rospy
+from std_msgs.msg import Bool
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 
@@ -19,6 +20,7 @@ class Navigation:
 
 				self.target_x = 0
 				self.target_y = 0
+				self.evading = 0
 				break
 			except rospy.exceptions.ROSException:
 				rospy.loginfo('Receive info timeout')
@@ -63,7 +65,7 @@ class Navigation:
 		print('No gap available')
 		return 4 #turn_around
 
-	def navigate(self, laser_scan, pose):
+	def navigate(self, laser_scan, pose, rs_scan):
 		dy = self.target_y - pose.position.y
 		dx = self.target_x - pose.position.x
 		print('remaining: (' + str(dy) + ', ' + str(dx) + ')')
@@ -82,18 +84,26 @@ class Navigation:
 			print('angle: ' + str(angle))
 
 			if self.check_obstacle(laser_scan, 0.3, 0, 30):
+				self.evading = 10
 				return self.find_closest_gap(laser_scan, 0.4, 30)
-			elif angle < -0.05 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) * 3 / 4, 90):
+			elif rs_scan == True:
+				self.evading = 10
+				return 2 #turn_left
+			elif self.evading == 0 and angle < -0.05 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) * 3 / 4, 90):
 				return 3 #turn_right
-			elif angle > 0.05 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) / 4, 90):
+			elif self.evading == 0 and angle > 0.05 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) / 4, 90):
 				return 2 #turn_left
 			else:
+				if self.evading > 0:
+					print('Evade motion')
+					self.evading = self.evading - 1
 				return 1 #forward
 
 	def wait_next(self, target_x, target_y, relative):
 		try:
 			laser_scan = rospy.wait_for_message('scan', LaserScan, 0.5)
 			odometry = rospy.wait_for_message('odom', Odometry, 0.5)
+			rs_scan = rospy.wait_for_message('rs_cam', Bool, 0.5)
 
 			if relative:
 				self.target_x = target_x * math.cos(self.offset_w) - target_y * math.sin(self.offset_w)
@@ -104,7 +114,7 @@ class Navigation:
 				self.target_x = target_x
 				self.target_y = target_y
 
-			return self.navigate(laser_scan, odometry.pose.pose)
+			return self.navigate(laser_scan, odometry.pose.pose, rs_scan.data)
 		except rospy.exceptions.ROSException:
 			rospy.loginfo('Receive info timeout')
 			return 0
