@@ -3,6 +3,7 @@
 import math
 import rospy
 from std_msgs.msg import Bool
+from std_msgs.msg import Int32
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from rospy.numpy_msg import numpy_msg
@@ -21,7 +22,8 @@ class Navigation:
 
 				self.target_x = 0
 				self.target_y = 0
-				self.evading = 0
+				self.evading_side = 0
+				self.evading_front = 0
 				break
 			except rospy.exceptions.ROSException:
 				rospy.loginfo('Receive info timeout')
@@ -85,19 +87,25 @@ class Navigation:
 			print('angle: ' + str(angle))
 
 			if self.check_obstacle(laser_scan, 0.3, 0, 30):
-				self.evading = 10
 				return self.find_closest_gap(laser_scan, 0.4, 30)
 			elif rs_scan == True:
-				self.evading = 10
+				self.evading_side = 3
+				self.evading_front = 10
 				return 2 #turn_left
-			elif self.evading == 0 and angle < -0.05 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) * 3 / 4, 90):
+			elif self.evading == 0 and angle < -0.05 and angle > -math.pi / 3 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) * 3 / 4, 90):
+				return 5 #advance_right
+			elif self.evading == 0 and angle > 0.05 and angle < math.pi / 3 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) / 4, 90):
+				return 4 #advance_left
+			elif self.evading == 0 and angle < -math.pi / 3 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) * 3 / 4, 90):
 				return 3 #turn_right
-			elif self.evading == 0 and angle > 0.05 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) / 4, 90):
+			elif self.evading == 0 and angle > math.pi / 3 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) / 4, 90):
+				return 2 #turn_left
+			elif self.evading_side > 0:
+				self.evading_side = self.evading_side - 1
 				return 2 #turn_left
 			else:
-				if self.evading > 0:
-					print('Evade motion')
-					self.evading = self.evading - 1
+				if self.evading_front > 0:
+					self.evading = self.evading_front - 1
 				return 1 #forward
 
 	def wait_next(self, target_x, target_y, relative):
@@ -105,7 +113,8 @@ class Navigation:
 			laser_scan = rospy.wait_for_message('scan', LaserScan, 0.5)
 			odometry = rospy.wait_for_message('odom', Odometry, 0.5)
 			rs_scan = rospy.wait_for_message('rs_depth', Bool, 0.5)
-			rs_frame = rospy.wait_for_message('rs_color', numpy_msg(Int32), 0.5)
+			#rs_frame = rospy.wait_for_message('rs_color', numpy_msg(Int32), 10)
+			#rospy.loginfo(rs_frame)
 
 			if relative:
 				self.target_x = target_x * math.cos(self.offset_w) - target_y * math.sin(self.offset_w)

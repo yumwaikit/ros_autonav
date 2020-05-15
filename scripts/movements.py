@@ -27,3 +27,13 @@ class Movement:
 		self.twist.linear = Vector3(0, 0, 0)
 		self.twist.angular = Vector3(0, 0, -0.2)
 		self.publisher.publish(self.twist)
+		
+	def advance_left(self):
+		self.twist.linear = Vector3(0.1, 0, 0)
+		self.twist.angular = Vector3(0, 0, 0.2)
+		self.publisher.publish(self.twist)	
+
+	def advance_right(self):
+		self.twist.linear = Vector3(0.1, 0, 0)
+		self.twist.angular = Vector3(0, 0, -0.2)
+		self.publisher.publish(self.twist)

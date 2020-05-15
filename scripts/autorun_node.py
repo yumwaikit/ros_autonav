@@ -81,6 +81,12 @@ def navigate(target_x, target_y):
 			print('Turn right')
 			move.turn_right()
 		elif output == 4:
+			print('Advance left')
+			move.advance_left()
+		elif output == 5:
+			print('Advance right')
+			move.advance_right()
+		elif output == 6:
 			print('Turn around')
 			turn_around()
 		elif output == 10:
@@ -105,7 +111,7 @@ def autorun_node():
 
 	rospy.init_node('autorun_node')
 	r = rospy.Rate(10)
-	navigate(0.5, 0.0)
+	navigate(2.0, 13.0)
 
 if __name__=="__main__":
 	try:

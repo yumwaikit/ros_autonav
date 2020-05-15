@@ -20,7 +20,7 @@ def grab_frame(pipeline):
 
 def realsense_node():
 	depth_publisher = rospy.Publisher('rs_depth', Bool, queue_size = 1)
-	color_publisher = rospy.Publisher('rs_color', numpy_msg(Int32), queue_size = 1)
+	#color_publisher = rospy.Publisher('rs_color', numpy_msg(Int32), queue_size = 1)
 	rospy.init_node('realsense_node')
 	r = rospy.Rate(10)
 	
@@ -29,13 +29,9 @@ def realsense_node():
 	
 	while not rospy.is_shutdown():
 		color_array, depth_array = grab_frame(pipeline)
-		ok = check_ground_obstacle(depth_array)
-		if ok == True:
-			print('Low obstacle')
-		else:
-			print('Clear')
-		depth_publisher.publish(ok)
-		color_publisher.publish(color_array)
+		has_obstacle = check_ground_obstacle(depth_array)
+		depth_publisher.publish(has_obstacle)
+		#color_publisher.publish(color_array)
 		r.sleep()
 
 if __name__=="__main__":
