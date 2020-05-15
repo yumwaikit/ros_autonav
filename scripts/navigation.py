@@ -5,6 +5,7 @@ import rospy
 from std_msgs.msg import Bool
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
+from rospy.numpy_msg import numpy_msg
 
 class Navigation:
 	def __init__(self):
@@ -103,7 +104,8 @@ class Navigation:
 		try:
 			laser_scan = rospy.wait_for_message('scan', LaserScan, 0.5)
 			odometry = rospy.wait_for_message('odom', Odometry, 0.5)
-			rs_scan = rospy.wait_for_message('rs_cam', Bool, 0.5)
+			rs_scan = rospy.wait_for_message('rs_depth', Bool, 0.5)
+			rs_frame = rospy.wait_for_message('rs_color', numpy_msg(Int32), 0.5)
 
 			if relative:
 				self.target_x = target_x * math.cos(self.offset_w) - target_y * math.sin(self.offset_w)

@@ -4,6 +4,7 @@ import numpy as np
 import rospy
 import pyrealsense2 as rs
 from std_msgs.msg import Bool
+from rospy.numpy_msg import numpy_msg
 
 def check_ground_obstacle(depth_array):
 	bottom = depth_array[240:,200:]
@@ -18,7 +19,8 @@ def grab_frame(pipeline):
 	return color_array, depth_array
 
 def realsense_node():
-	publisher = rospy.Publisher('rs_cam', Bool, queue_size = 1)
+	depth_publisher = rospy.Publisher('rs_depth', Bool, queue_size = 1)
+	color_publisher = rospy.Publisher('rs_color', numpy_msg(Int32), queue_size = 1)
 	rospy.init_node('realsense_node')
 	r = rospy.Rate(10)
 	
@@ -32,7 +34,8 @@ def realsense_node():
 			print('Low obstacle')
 		else:
 			print('Clear')
-		publisher.publish(ok)
+		depth_publisher.publish(ok)
+		color_publisher.publish(color_array)
 		r.sleep()
 
 if __name__=="__main__":
