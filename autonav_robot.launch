@@ -1,0 +1,4 @@
+<launch>
+	<include file="$(find turtlebot3_bringup)/launch/turtlebot3_robot.launch" />
+	<node pkg="ros_autonav" type="ros_autonav" name="realsense_node.py" output="screen" />
+</launch>

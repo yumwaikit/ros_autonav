@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import math
+import numpy as np
 import rospy
 from std_msgs.msg import Bool
 from std_msgs.msg import Int32
@@ -19,6 +20,7 @@ class Navigation:
 				self.offset_w = math.acos(odometry.pose.pose.orientation.w) * 2
 				if odometry.pose.pose.orientation.z < 0:
 					self.offset_w = -self.offset_w
+				self.init_w = self.offset_w
 
 				self.target_x = 0
 				self.target_y = 0
@@ -71,14 +73,17 @@ class Navigation:
 	def navigate(self, laser_scan, pose, rs_scan):
 		dy = self.target_y - pose.position.y
 		dx = self.target_x - pose.position.x
+		angle = math.acos(pose.orientation.w) * 2
+		if pose.orientation.z < 0:
+			angle = -angle
 		print('remaining: (' + str(dy) + ', ' + str(dx) + ')')
 
 		if abs(dy) < 0.05 and abs(dx) < 0.05:
-			return 10 #halt and break
+			if abs(angle - self.init_w) > 0.05:
+				return 2 #turn_left
+			else:
+				return 10 #halt and break
 		else:
-			angle = math.acos(pose.orientation.w) * 2
-			if pose.orientation.z < 0:
-				angle = -angle
 			angle = math.atan2(dy, dx) - angle
 			if angle < -math.pi:
 				angle = angle + math.pi * 2
@@ -102,10 +107,10 @@ class Navigation:
 				return 2 #turn_left
 			elif self.evading_side > 0:
 				self.evading_side = self.evading_side - 1
-				return 2 #turn_left
+				return 3 #turn_right
 			else:
 				if self.evading_front > 0:
-					self.evading = self.evading_front - 1
+					self.evading_front = self.evading_front - 1
 				return 1 #forward
 
 	def wait_next(self, target_x, target_y, relative):
@@ -115,6 +120,7 @@ class Navigation:
 			rs_scan = rospy.wait_for_message('rs_depth', Bool, 0.5)
 			#rs_frame = rospy.wait_for_message('rs_color', numpy_msg(Int32), 10)
 			#rospy.loginfo(rs_frame)
+			rospy.loginfo(odometry)
 
 			if relative:
 				self.target_x = target_x * math.cos(self.offset_w) - target_y * math.sin(self.offset_w)
