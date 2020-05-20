@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import math
-import numpy as np
+import numpy
 import rospy
 from std_msgs.msg import Bool
 from std_msgs.msg import Int32
@@ -10,25 +10,47 @@ from nav_msgs.msg import Odometry
 from rospy.numpy_msg import numpy_msg
 
 class Navigation:
-	def __init__(self):
-		while True:
+	def __init__(self, relative):
+		while not rospy.is_shutdown():
 			try:
+				self.relative = relative
 				odometry = rospy.wait_for_message('odom', Odometry, 0.5)
 
-				self.offset_x = odometry.pose.pose.position.x
-				self.offset_y = odometry.pose.pose.position.y
-				self.offset_w = math.acos(odometry.pose.pose.orientation.w) * 2
+				self.init_x = odometry.pose.pose.position.x
+				self.init_y = odometry.pose.pose.position.y
+				self.init_w = math.acos(odometry.pose.pose.orientation.w) * 2
 				if odometry.pose.pose.orientation.z < 0:
-					self.offset_w = -self.offset_w
-				self.init_w = self.offset_w
+					self.init_w = -self.init_w
 
-				self.target_x = 0
-				self.target_y = 0
-				self.evading_side = 0
-				self.evading_front = 0
+				print("Auto navigation Start")
+				print("Initial position: (" + str(self.init_x) + ", " + str(self.init_y) + ")")
+				print("Initial angle: " + str(self.init_w / math.pi * 180))
+
+				self.cur_x = self.init_x
+				self.cur_y = self.init_y
+				self.target_x = self.init_x
+				self.target_y = self.init_y
+				self.target_w = self.init_w
+				self.evading = 0
 				break
 			except rospy.exceptions.ROSException:
 				rospy.loginfo('Receive info timeout')
+				
+	def set_target(self, target_x, target_y, target_w = 0):
+		if self.relative:
+			self.target_x = target_x * math.cos(self.init_w) - target_y * math.sin(self.init_w)
+			self.target_y = target_x * math.sin(self.init_w) + target_y * math.cos(self.init_w)
+			self.target_x = self.target_x + self.init_x
+			self.target_y = self.target_y + self.init_y
+			self.target_w = self.target_w + target_w
+			if self.target_w < -math.pi:
+				self.target_w = self.target_w + math.pi * 2
+			elif self.target_w > math.pi:
+				self.target_w = self.target_w - math.pi * 2
+		else:
+			self.target_x = target_x
+			self.target_y = target_y
+			self.target_w = target_w
 
 	def check_obstacle(self, laser_scan, distance, index, arc_length):
 		dmin = laser_scan.range_max
@@ -70,7 +92,7 @@ class Navigation:
 		print('No gap available')
 		return 4 #turn_around
 
-	def navigate(self, laser_scan, pose, rs_scan):
+	def navigate(self, laser_scan, pose, rs_scan, is_last):
 		dy = self.target_y - pose.position.y
 		dx = self.target_x - pose.position.x
 		angle = math.acos(pose.orientation.w) * 2
@@ -78,9 +100,19 @@ class Navigation:
 			angle = -angle
 		print('remaining: (' + str(dy) + ', ' + str(dx) + ')')
 
-		if abs(dy) < 0.05 and abs(dx) < 0.05:
-			if abs(angle - self.init_w) > 0.05:
+		if (not is_last) and abs(dy) < 0.5 and abs(dx) < 0.5:
+			return 9 #continue
+		elif is_last and abs(dy) < 0.05 and abs(dx) < 0.05:
+			angle = self.target_w - angle
+			if angle < -math.pi:
+				angle = angle + math.pi * 2
+			elif angle > math.pi:
+				angle = angle - math.pi * 2
+			print('angle: ' + str(angle / math.pi * 180))
+			if angle > 0.05:
 				return 2 #turn_left
+			elif angle < -0.05:
+				return 3 #turn_right
 			else:
 				return 10 #halt and break
 		else:
@@ -89,14 +121,13 @@ class Navigation:
 				angle = angle + math.pi * 2
 			elif angle > math.pi:
 				angle = angle - math.pi * 2
-			print('angle: ' + str(angle))
+			print('angle: ' + str(angle / math.pi * 180))
 
 			if self.check_obstacle(laser_scan, 0.3, 0, 30):
 				return self.find_closest_gap(laser_scan, 0.4, 30)
 			elif rs_scan == True:
-				self.evading_side = 3
-				self.evading_front = 10
-				return 2 #turn_left
+				self.evading = 10
+				return 3 #turn_right
 			elif self.evading == 0 and angle < -0.05 and angle > -math.pi / 3 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) * 3 / 4, 90):
 				return 5 #advance_right
 			elif self.evading == 0 and angle > 0.05 and angle < math.pi / 3 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) / 4, 90):
@@ -105,33 +136,30 @@ class Navigation:
 				return 3 #turn_right
 			elif self.evading == 0 and angle > math.pi / 3 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) / 4, 90):
 				return 2 #turn_left
-			elif self.evading_side > 0:
-				self.evading_side = self.evading_side - 1
-				return 3 #turn_right
 			else:
-				if self.evading_front > 0:
-					self.evading_front = self.evading_front - 1
+				if self.evading > 0:
+					self.evading = self.evading - 1
 				return 1 #forward
 
-	def wait_next(self, target_x, target_y, relative):
+	def wait_next(self, is_last):
 		try:
 			laser_scan = rospy.wait_for_message('scan', LaserScan, 0.5)
 			odometry = rospy.wait_for_message('odom', Odometry, 0.5)
 			rs_scan = rospy.wait_for_message('rs_depth', Bool, 0.5)
 			#rs_frame = rospy.wait_for_message('rs_color', numpy_msg(Int32), 10)
 			#rospy.loginfo(rs_frame)
-			rospy.loginfo(odometry)
-
-			if relative:
-				self.target_x = target_x * math.cos(self.offset_w) - target_y * math.sin(self.offset_w)
-				self.target_y = target_x * math.sin(self.offset_w) + target_y * math.cos(self.offset_w)
-				self.target_x = self.target_x + self.offset_x
-				self.target_y = self.target_y + self.offset_y
+			
+			if self.relative:
+				cur_x = odometry.pose.pose.position.x - self.init_x
+				cur_y = odometry.pose.pose.position.y - self.init_y
+				self.cur_x = cur_x * math.cos(-self.init_w) - cur_y * math.sin(-self.init_w)
+				self.cur_y = cur_x * math.sin(-self.init_w) + cur_y * math.cos(-self.init_w)
 			else:
-				self.target_x = target_x
-				self.target_y = target_y
+				self.cur_x = odometry.pose.pose.position.x
+				self.cur_y = odometry.pose.pose.position.y
+			print('Current location: (' + str(self.cur_x) + ', ' + str(self.cur_y) + ')')
 
-			return self.navigate(laser_scan, odometry.pose.pose, rs_scan.data)
+			return self.navigate(laser_scan, odometry.pose.pose, rs_scan.data, is_last)
 		except rospy.exceptions.ROSException:
 			rospy.loginfo('Receive info timeout')
 			return 0

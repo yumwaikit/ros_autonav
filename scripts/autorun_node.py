@@ -9,11 +9,15 @@ from movements import Movement
 from manipulations import Joints
 from manipulations import Gripper
 from navigation import Navigation
+from select_data import DataSelect
+from shortest_path import Dijkstra
 
 move = None
 joints = None
 gripper = None
 nav = None
+data = None
+dij = None
 r = None
 
 def pick_up_item():
@@ -59,15 +63,14 @@ def turn_around():
 		print('Receive info timeout')
 		print('Halt')
 
-def navigate(target_x, target_y):
+def navigate(is_last):
 	global move
+	global gripper
 	global nav
 	global r
 
-	nav = Navigation()
-
 	while not rospy.is_shutdown():
-		output = nav.wait_next(target_x, target_y, True)
+		output = nav.wait_next(is_last)
 		if output == 0:
 			print('Halt')
 			move.halt()
@@ -89,29 +92,86 @@ def navigate(target_x, target_y):
 		elif output == 6:
 			print('Turn around')
 			turn_around()
+		elif output == 9:
+			print('Arrive at node, continue')
+			break;
 		elif output == 10:
-			print('Exit')
+			print('Arrive')
 			move.halt()
+			gripper.grab()
+			rospy.sleep(1)
+			gripper.release()
+			print('Exit Auto navigation')
 			break
 		r.sleep()
 
+def navigate_to_point(target_x, target_y):
+	global nav
+	global data
+	global dij
+	
+	nodes = data.select_nodes()
+	print(nodes[1][1])
+	start = -1
+	end = -1
+	d_min = float('inf')
+	for node in nodes:
+		d = math.sqrt((nodes[node][1] - nav.cur_y) ** 2 + (nodes[node][0] - nav.cur_x) ** 2)
+		if d < d_min:
+			d_min = d
+			start = node
+	d_min = float('inf')
+	for node in nodes:
+		d = math.sqrt((nodes[node][1] - target_y) ** 2 + (nodes[node][0] - target_x) ** 2)
+		if d < d_min:
+			d_min = d
+			end = node
+			
+	path = dij.get_path(start, end)
+	points = map(lambda node: nodes[node], path)
+	for point in points:
+		nav.set_target(point[0], point[1], True)
+		navigate(False)
+	nav.set_target(target_x, target_y, True)
+	navigate(True)
+		
 def autorun_node():
 	global move
 	global joints
 	global gripper
 	global nav
+	global data
+	global dij
 	global r
 	
 	move_publisher = rospy.Publisher('cmd_vel', Twist, queue_size = 5)
 	joints_publisher = rospy.Publisher('joint_trajectory_point', Float64MultiArray, queue_size = 5)
 	gripper_publisher = rospy.Publisher('gripper_position', Float64MultiArray, queue_size = 5)
-	move = Movement(move_publisher)
-	joints = Joints(joints_publisher)
-	gripper = Gripper(gripper_publisher)
 
 	rospy.init_node('autorun_node')
 	r = rospy.Rate(10)
-	navigate(2.0, 13.0)
+	
+	move = Movement(move_publisher)
+	joints = Joints(joints_publisher)
+	gripper = Gripper(gripper_publisher)
+	data = DataSelect()
+	dij = Dijkstra(data.select_graph())
+	
+	raw_input('Press Enter to start calibration.')
+	nav = Navigation(True)
+	print('Calibration complete.')
+	try:
+		while not rospy.is_shutdown():
+			print('=========================================')
+			print('ROS Auto-Navigation Node')
+			print('\n')
+			print('Please input target coordinates for navigation.')
+			x = float(raw_input('x = '))
+			y = float(raw_input('y = '))
+			navigate_to_point(x, y)
+	except ValueError:
+		print('Node terminated')
+		pass
 
 if __name__=="__main__":
 	try:

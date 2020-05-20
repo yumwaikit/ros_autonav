@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import numpy as np
+import numpy
 import rospy
 import pyrealsense2 as rs
 from std_msgs.msg import Bool
@@ -8,14 +8,14 @@ from rospy.numpy_msg import numpy_msg
 
 def check_ground_obstacle(depth_array):
 	bottom = depth_array[240:,200:]
-	return np.any((bottom > 0) & (bottom < 180))
+	return numpy.any((bottom > 0) & (bottom < 180))
 
 def grab_frame(pipeline):
 	frames = pipeline.wait_for_frames()
 	color = frames.get_color_frame().as_frame().get_data()
-	color_array = np.asanyarray(color)
+	color_array = numpy.asanyarray(color)
 	depth = frames.get_depth_frame().as_frame().get_data()
-	depth_array = np.asanyarray(depth)
+	depth_array = numpy.asanyarray(depth)
 	return color_array, depth_array
 
 def realsense_node():
