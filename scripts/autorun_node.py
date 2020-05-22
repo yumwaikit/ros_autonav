@@ -9,6 +9,7 @@ from movements import Movement
 from manipulations import Joints
 from manipulations import Gripper
 from navigation import Navigation
+from diagnostic_info import Diagnose
 from select_data import DataSelect
 from shortest_path import Dijkstra
 
@@ -16,6 +17,7 @@ move = None
 joints = None
 gripper = None
 nav = None
+diag = None
 data = None
 dij = None
 r = None
@@ -111,12 +113,12 @@ def navigate_to_point(target_x, target_y):
 	global dij
 	
 	nodes = data.select_nodes()
-	print(nodes[1][1])
 	start = -1
 	end = -1
 	d_min = float('inf')
 	for node in nodes:
 		d = math.sqrt((nodes[node][1] - nav.cur_y) ** 2 + (nodes[node][0] - nav.cur_x) ** 2)
+		print(str(node) + ': ' + str(d))
 		if d < d_min:
 			d_min = d
 			start = node
@@ -126,20 +128,21 @@ def navigate_to_point(target_x, target_y):
 		if d < d_min:
 			d_min = d
 			end = node
-			
+	
 	path = dij.get_path(start, end)
 	points = map(lambda node: nodes[node], path)
 	for point in points:
-		nav.set_target(point[0], point[1], True)
+		nav.set_target(point[0], point[1])
 		navigate(False)
-	nav.set_target(target_x, target_y, True)
+	nav.set_target(target_x, target_y)
 	navigate(True)
-		
+
 def autorun_node():
 	global move
 	global joints
 	global gripper
 	global nav
+	global diag
 	global data
 	global dij
 	global r
@@ -157,25 +160,43 @@ def autorun_node():
 	data = DataSelect()
 	dij = Dijkstra(data.select_graph())
 	
-	raw_input('Press Enter to start calibration.')
-	nav = Navigation(True)
-	print('Calibration complete.')
-	try:
-		while not rospy.is_shutdown():
-			print('=========================================')
-			print('ROS Auto-Navigation Node')
-			print('\n')
-			print('Please input target coordinates for navigation.')
-			x = float(raw_input('x = '))
-			y = float(raw_input('y = '))
-			navigate_to_point(x, y)
-	except ValueError:
-		print('Node terminated')
-		pass
+	d = raw_input('Press Enter to start calibration.')
+	if d == 'd':
+		diag = Diagnose(True)
+		joints.neutral()
+		gripper.release()
+		print('Calibration complete.')
+		print('=========================================')
+		print('ROS Auto-Navigation Node')
+		print('---------Diagnostic mode')
+		print('\n')
+		try:
+			while not rospy.is_shutdown():
+				diag.wait_next()
+				rospy.sleep(1)
+		except rospy.ROSInterruptException:
+			print('Node terminated')
+			pass
+	else:
+		nav = Navigation(True)
+		joints.neutral()
+		gripper.release()
+		print('Calibration complete.')
+		try:
+			while not rospy.is_shutdown():
+				print('=========================================')
+				print('ROS Auto-Navigation Node')
+				print('\n')
+				print('Please input the target coordinates.')
+				x = float(raw_input('x = '))
+				y = float(raw_input('y = '))
+				navigate_to_point(x, y)
+		except ValueError:
+			print('Node terminated')
+			pass
 
 if __name__=="__main__":
 	try:
-		print('Start autorun')
 		autorun_node()
 	except rospy.ROSInterruptException:
 		pass

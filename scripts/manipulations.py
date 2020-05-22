@@ -9,7 +9,7 @@ class Joints:
 		self.pos = Float64MultiArray()
 
 	def neutral(self):
-		self.pos.data = [1.0, 0.0, -math.pi * 3 / 8, math.pi / 4, math.pi / 8]
+		self.pos.data = [1.0, 0.0, -math.pi / 16, math.pi * 7  / 16, -math.pi * 3 / 8]
 		self.publisher.publish(self.pos)
 
 	def hold(self):

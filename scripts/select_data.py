@@ -29,7 +29,3 @@ class DataSelect:
 	def select_nodes(self):
 		nodes = self.select_db('select id, x, y from Nodes')
 		return {row[0] : (row[1], row[2]) for row in nodes}
-	
-if __name__=="__main__":
-	data = DataSelect()
-	print(data.select_nodes())

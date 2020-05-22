@@ -31,6 +31,7 @@ class Navigation:
 				self.target_x = self.init_x
 				self.target_y = self.init_y
 				self.target_w = self.init_w
+				self.turning = 0
 				self.evading = 0
 				break
 			except rospy.exceptions.ROSException:
@@ -42,7 +43,7 @@ class Navigation:
 			self.target_y = target_x * math.sin(self.init_w) + target_y * math.cos(self.init_w)
 			self.target_x = self.target_x + self.init_x
 			self.target_y = self.target_y + self.init_y
-			self.target_w = self.target_w + target_w
+			self.target_w = self.init_w + target_w
 			if self.target_w < -math.pi:
 				self.target_w = self.target_w + math.pi * 2
 			elif self.target_w > math.pi:
@@ -85,8 +86,10 @@ class Navigation:
 					ok_r = 0
 
 			if ok_l >= arc_length:
+				self.turning = -1
 				return 2 #turn_left
 			if ok_r >= arc_length:
+				self.turning = 1
 				return 3 #turn_right
 
 		print('No gap available')
@@ -124,21 +127,34 @@ class Navigation:
 			print('angle: ' + str(angle / math.pi * 180))
 
 			if self.check_obstacle(laser_scan, 0.3, 0, 30):
-				return self.find_closest_gap(laser_scan, 0.4, 30)
+				if self.evading > 0 and self.turning == -1:
+					return 2 #turn_left
+				elif self.evading > 0 and self.turning == 1:
+					return 3 #turn_right
+				else:
+					return self.find_closest_gap(laser_scan, 0.4, 30)
 			elif rs_scan == True:
 				self.evading = 10
-				return 3 #turn_right
+				if self.turning == -1:
+					return 2 #turn_left
+				else:
+					return 3 #turn_right
 			elif self.evading == 0 and angle < -0.05 and angle > -math.pi / 3 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) * 3 / 4, 90):
+				self.turning = 1
 				return 5 #advance_right
 			elif self.evading == 0 and angle > 0.05 and angle < math.pi / 3 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) / 4, 90):
+				self.turning = -1
 				return 4 #advance_left
 			elif self.evading == 0 and angle < -math.pi / 3 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) * 3 / 4, 90):
+				self.turning = 1
 				return 3 #turn_right
 			elif self.evading == 0 and angle > math.pi / 3 and not self.check_obstacle(laser_scan, 0.3, len(laser_scan.ranges) / 4, 90):
+				self.turning = -1
 				return 2 #turn_left
 			else:
 				if self.evading > 0:
 					self.evading = self.evading - 1
+				self.turning = 0
 				return 1 #forward
 
 	def wait_next(self, is_last):
@@ -157,7 +173,7 @@ class Navigation:
 			else:
 				self.cur_x = odometry.pose.pose.position.x
 				self.cur_y = odometry.pose.pose.position.y
-			print('Current location: (' + str(self.cur_x) + ', ' + str(self.cur_y) + ')')
+			print('Current position: (' + str(self.cur_x) + ', ' + str(self.cur_y) + ')')
 
 			return self.navigate(laser_scan, odometry.pose.pose, rs_scan.data, is_last)
 		except rospy.exceptions.ROSException:
