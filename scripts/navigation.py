@@ -28,6 +28,7 @@ class Navigation:
 
 				self.cur_x = self.init_x
 				self.cur_y = self.init_y
+				self.cur_w = self.init_w
 				self.target_x = self.init_x
 				self.target_y = self.init_y
 				self.target_w = self.init_w
@@ -95,7 +96,7 @@ class Navigation:
 		print('No gap available')
 		return 4 #turn_around
 
-	def navigate(self, laser_scan, pose, rs_scan, is_last):
+	def navigate(self, laser_scan, pose, rs_scan, status):
 		dy = self.target_y - pose.position.y
 		dx = self.target_x - pose.position.x
 		angle = math.acos(pose.orientation.w) * 2
@@ -103,9 +104,9 @@ class Navigation:
 			angle = -angle
 		print('remaining: (' + str(dy) + ', ' + str(dx) + ')')
 
-		if (not is_last) and abs(dy) < 0.5 and abs(dx) < 0.5:
+		if status == 1 and abs(dy) < 0.5 and abs(dx) < 0.5:
 			return 9 #continue
-		elif is_last and abs(dy) < 0.05 and abs(dx) < 0.05:
+		elif status == 2 and abs(dy) < 0.05 and abs(dx) < 0.05:
 			angle = self.target_w - angle
 			if angle < -math.pi:
 				angle = angle + math.pi * 2
@@ -157,7 +158,7 @@ class Navigation:
 				self.turning = 0
 				return 1 #forward
 
-	def wait_next(self, is_last):
+	def wait_next(self, status):
 		try:
 			laser_scan = rospy.wait_for_message('scan', LaserScan, 0.5)
 			odometry = rospy.wait_for_message('odom', Odometry, 0.5)
@@ -170,12 +171,27 @@ class Navigation:
 				cur_y = odometry.pose.pose.position.y - self.init_y
 				self.cur_x = cur_x * math.cos(-self.init_w) - cur_y * math.sin(-self.init_w)
 				self.cur_y = cur_x * math.sin(-self.init_w) + cur_y * math.cos(-self.init_w)
+				cur_w = math.acos(odometry.pose.pose.orientation.w) * 2
+				if odometry.pose.pose.orientation.z < 0:
+					cur_w = -cur_w
+				self.cur_w = cur_w - self.init_w
+				if self.cur_w < -math.pi:
+					self.cur_w = self.cur_w + math.pi * 2
+				elif self.cur_w > math.pi:
+					self.cur_w = self.cur_w - math.pi * 2
 			else:
 				self.cur_x = odometry.pose.pose.position.x
 				self.cur_y = odometry.pose.pose.position.y
+				self.cur_w = math.acos(pose.orientation.w) * 2
+				if odometry.pose.pose.orientation.z < 0:
+					self.cur_w = -self.cur_w
 			print('Current position: (' + str(self.cur_x) + ', ' + str(self.cur_y) + ')')
-
-			return self.navigate(laser_scan, odometry.pose.pose, rs_scan.data, is_last)
+			print('Current orientation: ' + str(self.cur_w / math.pi * 180))
+			
+			if status > 0:
+				return self.navigate(laser_scan, odometry.pose.pose, rs_scan.data, status)
+			else:
+				return 0
 		except rospy.exceptions.ROSException:
 			rospy.loginfo('Receive info timeout')
 			return 0
