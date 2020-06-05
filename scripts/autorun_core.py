@@ -17,6 +17,7 @@ from autorun_gui import Controller
 class AutorunNode:
 	def __init__(self):
 		self.reset_publisher = rospy.Publisher('reset', Empty, queue_size = 5)
+		self.rs_reset_publisher = rospy.Publisher('rs_reset', Empty, queue_size = 5)
 		move_publisher = rospy.Publisher('cmd_vel', Twist, queue_size = 5)
 		joints_publisher = rospy.Publisher('joint_trajectory_point', Float64MultiArray, queue_size = 5)
 		gripper_publisher = rospy.Publisher('gripper_position', Float64MultiArray, queue_size = 5)
@@ -33,80 +34,100 @@ class AutorunNode:
 		self.win = None
 		
 		self.continue_run = False
+		self.track_device = 2
 		
 	def execute(self):
-		arg = raw_input('Press Enter to start calibration.')
-		self.win = Controller('OfficeMap.jpg', self.data.select_graph())
-		self.reset_publisher.publish(Empty())
-		self.joints.neutral()
-		self.gripper.release()
-		self.nav = Navigation(True)
-		print('Calibration complete.')
-		if arg == 'd':
-			print('=========================================')
-			print('ROS Auto-Navigation Node')
-			print('---------Diagnostic mode')
-			print('\n')
-			try:
-				while not rospy.is_shutdown():
-					self.nav.wait_next(0)
-					self.win.update(self.nav.cur_x, self.nav.cur_y, self.nav.cur_w)
-					rospy.sleep(1)
-			except rospy.ROSInterruptException:
-				print('Node terminated')
-				pass
-		elif arg == 'c':
-			try:
-				while not rospy.is_shutdown():
-					print('=========================================')
-					print('ROS Auto-Navigation Node')
-					print('\n')
-					coordinates = raw_input('Please input the target coordinates (x,y)...')
-					if coordinates.count(',') == 0:
-						print('Node terminated')
-						break
-					elif coordinates.count(',') <> 1:
+		while not rospy.is_shutdown():
+			arg = raw_input('Press Enter to start calibration.')
+			self.reset_publisher.publish(Empty())
+			self.rs_reset_publisher.publish(Empty())
+			self.joints.neutral()
+			self.gripper.release()
+			self.nav = Navigation(self.track_device)
+			self.win = Controller('OfficeMap.jpg', self.data.select_graph())
+			self.win.update(self.nav.cur_x, self.nav.cur_y, self.nav.cur_w)
+			print('Calibration complete.')
+			if arg == 'd':
+				self.diagnose_mode()
+			elif arg == 'c':
+				self.command_mode()
+			else:
+				self.gui_mode()
+			break
+			
+	def execute2(self):
+		while not rospy.is_shutdown():
+			self.move.forward()
+			self.r.sleep()
+			
+	def diagnose_mode(self):
+		print('=========================================')
+		print('ROS Auto-Navigation Node')
+		print('---------Diagnostic mode')
+		print('\n')
+		try:
+			while not rospy.is_shutdown():
+				self.nav.wait_next(0)
+				self.win.update(self.nav.cur_x, self.nav.cur_y, self.nav.cur_w)
+				self.r.sleep()
+		except rospy.ROSInterruptException:
+			print('Node terminated')
+			pass
+		
+	def command_mode(self):
+		try:
+			while not rospy.is_shutdown():
+				print('=========================================')
+				print('ROS Auto-Navigation Node')
+				print('\n')
+				coordinates = raw_input('Please input the target coordinates (x,y)...')
+				if coordinates.count(',') == 0:
+					print('Node terminated')
+					break
+				elif coordinates.count(',') <> 1:
+					print('Not a proper coordinate string.')
+					continue
+				else:
+					xy = coordinates.split(',')
+					try:
+						x = float(xy[0])
+						y = float(xy[1])
+						self.gripper.grab()
+						self.navigate_to_point(x, y)
+						self.continue_run = False
+					except ValueError:
 						print('Not a proper coordinate string.')
 						continue
-					else:
-						xy = coordinates.split(',')
-						try:
-							x = float(xy[0])
-							y = float(xy[1])
-							self.gripper.grab()
-							self.navigate_to_point(x, y)
-							self.continue_run = False
-						except ValueError:
-							print('Not a proper coordinate string.')
-							continue
-			except rospy.ROSInterruptException:
+		except rospy.ROSInterruptException:
+			print('Node terminated')
+			pass
+		
+	def gui_mode(self):
+		self.win.canvas.bind("<Button-1>", self.window_clicked)
+		try:
+			while not rospy.is_shutdown():
+				print('=========================================')
+				print('ROS Auto-Navigation Node')
+				print('\n')
+				print('Click target location on map to navigate...')
+				raw_input('Press Enter to quit.')
 				print('Node terminated')
-				pass
-		else:
-			self.win.canvas.bind("<Button-1>", self.window_clicked)
-			try:
-				while not rospy.is_shutdown():
-					print('=========================================')
-					print('ROS Auto-Navigation Node')
-					print('\n')
-					raw_input('Please click target location on map...')
-			except rospy.ROSInterruptException:
-				print('Node terminated')
-				pass				
+				break
+		except rospy.ROSInterruptException:
+			print('Node terminated')
+			pass
 	
 	def window_clicked(self, event):
 		x, y = self.win.reverse_transform(event.x, event.y)
-		self.continue_run = False
 		self.win.display_destination(event.x, event.y)
-		rospy.sleep(1)
 		self.gripper.grab()
+		self.continue_run = True
 		self.navigate_to_point(x, y)
-		if self.continue_run:
-			print('=========================================')
-			print('ROS Auto-Navigation Node')
-			print('\n')
-			raw_input('Please click target location on map...')
-			self.continue_run = False
+		print('=========================================')
+		print('ROS Auto-Navigation Node')
+		print('\n')
+		print('Click target location on map to navigate...')
+		print('Press Enter to quit')
 			
 	def navigate_to_point(self, target_x, target_y):
 		nodes = self.data.select_nodes()
@@ -115,7 +136,6 @@ class AutorunNode:
 		d_min = float('inf')
 		for node in nodes:
 			d = math.sqrt((nodes[node][1] - self.nav.cur_y) ** 2 + (nodes[node][0] - self.nav.cur_x) ** 2)
-			print(str(node) + ': ' + str(d))
 			if d < d_min:
 				d_min = d
 				start = node
@@ -138,9 +158,10 @@ class AutorunNode:
 		if self.continue_run:
 			self.nav.set_target(target_x, target_y)
 			self.navigate(2)
+		self.continue_run = False
 		
 	def navigate(self, status):
-		while not rospy.is_shutdown() and self.continue_run:
+		while self.continue_run and not rospy.is_shutdown():
 			output = self.nav.wait_next(status)
 			self.win.update(self.nav.cur_x, self.nav.cur_y, self.nav.cur_w)
 			if output == 0:
@@ -175,7 +196,7 @@ class AutorunNode:
 				self.gripper.release()
 				print('Exit Auto navigation')
 				break
-			self.r.sleep()	
+			self.r.sleep()
 
 	def turn_around(self):
 		try:
