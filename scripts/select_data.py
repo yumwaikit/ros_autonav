@@ -3,6 +3,7 @@
 import numpy
 import pymssql
 
+
 class DataSelect:
 	def __init__(self):
 		self.server = 'localhost'
@@ -28,4 +29,4 @@ class DataSelect:
 	
 	def select_nodes(self):
 		nodes = self.select_db('select id, x, y from Nodes')
-		return {row[0] : (row[1], row[2]) for row in nodes}
+		return {row[0]: (row[1], row[2]) for row in nodes}

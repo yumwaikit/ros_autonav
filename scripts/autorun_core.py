@@ -2,6 +2,7 @@
 
 import math
 import rospy
+import threading
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import Empty
@@ -14,38 +15,49 @@ from select_data import DataSelect
 from shortest_path import Dijkstra
 from autorun_gui import Controller
 
-class AutorunNode:
-	def __init__(self):
-		self.reset_publisher = rospy.Publisher('reset', Empty, queue_size = 5)
-		self.rs_reset_publisher = rospy.Publisher('rs_reset', Empty, queue_size = 5)
-		move_publisher = rospy.Publisher('cmd_vel', Twist, queue_size = 5)
-		joints_publisher = rospy.Publisher('joint_trajectory_point', Float64MultiArray, queue_size = 5)
-		gripper_publisher = rospy.Publisher('gripper_position', Float64MultiArray, queue_size = 5)
 
+class AutorunNode:
+	def __init__(self, robot_ids):
+		self.robot_ids = robot_ids
 		rospy.init_node('autorun_node')
 		self.r = rospy.Rate(10)
-	
-		self.move = Movement(move_publisher)
-		self.joints = Joints(joints_publisher)
-		self.gripper = Gripper(gripper_publisher)
+
+		self.reset_publisher = {}
+		self.rs_reset_publisher = {}
+		self.move = {}
+		self.joints = {}
+		self.gripper = {}
+		self.nav = {}
+		self.continue_run = {}
+		self.threads = {}
+		self.win = None
 		self.data = DataSelect()
 		self.dij = Dijkstra(self.data.select_graph())
-		self.nav = None
-		self.win = None
-		
-		self.continue_run = False
 		self.track_device = 2
 		
+		for i in robot_ids:
+			self.reset_publisher[i] = rospy.Publisher('/' + str(i) + '/reset', Empty, queue_size=5)
+			self.rs_reset_publisher[i] = rospy.Publisher('/' + str(i) + '/rs_reset', Empty, queue_size=5)
+
+			move_publisher = rospy.Publisher('/' + str(i) + '/cmd_vel', Twist, queue_size=5)
+			self.move[i] = Movement(move_publisher)
+			joints_publisher = rospy.Publisher('/' + str(i) + '/joint_trajectory_point', Float64MultiArray, queue_size=5)
+			self.joints[i] = Joints(joints_publisher)
+			gripper_publisher = rospy.Publisher('/' + str(i) + '/gripper_position', Float64MultiArray, queue_size=5)
+			self.gripper[i] = Gripper(gripper_publisher)
+			self.continue_run[i] = False
+
 	def execute(self):
 		while not rospy.is_shutdown():
 			arg = raw_input('Press Enter to start calibration.')
-			self.reset_publisher.publish(Empty())
-			self.rs_reset_publisher.publish(Empty())
-			self.joints.neutral()
-			self.gripper.release()
-			self.nav = Navigation(self.track_device)
-			self.win = Controller('OfficeMap.jpg', self.data.select_graph())
-			self.win.update(self.nav.cur_x, self.nav.cur_y, self.nav.cur_w)
+			self.win = Controller('OfficeMap.jpg', self.data.select_graph(), self.robot_ids)
+
+			for i in self.robot_ids:
+				self.threads[i] = threading.Thread(target=self.init_robot, args=i)
+				self.threads[i].start()
+			for i, t in self.threads:
+				t.join()
+
 			print('Calibration complete.')
 			if arg == 'd':
 				self.diagnose_mode()
@@ -54,11 +66,14 @@ class AutorunNode:
 			else:
 				self.gui_mode()
 			break
-			
-	def execute2(self):
-		while not rospy.is_shutdown():
-			self.move.forward()
-			self.r.sleep()
+
+	def init_robot(self, i):
+		self.reset_publisher[i].publish(Empty())
+		self.rs_reset_publisher[i].publish(Empty())
+		self.joints[i].neutral()
+		self.gripper[i].release()
+		self.nav[i] = Navigation(i, self.track_device)
+		self.win.update(i, self.nav[i].cur_x, self.nav[i].cur_y, self.nav[i].cur_w)
 			
 	def diagnose_mode(self):
 		print('=========================================')
@@ -67,8 +82,8 @@ class AutorunNode:
 		print('\n')
 		try:
 			while not rospy.is_shutdown():
-				self.nav.wait_next(0)
-				self.win.update(self.nav.cur_x, self.nav.cur_y, self.nav.cur_w)
+				self.nav[self.robot_ids[0]].wait_next(0)
+				self.win.update(self.nav[self.robot_ids[0]].cur_x, self.nav[self.robot_ids[0]].cur_y, self.nav[self.robot_ids[0]].cur_w)
 				self.r.sleep()
 		except rospy.ROSInterruptException:
 			print('Node terminated')
@@ -84,7 +99,7 @@ class AutorunNode:
 				if coordinates.count(',') == 0:
 					print('Node terminated')
 					break
-				elif coordinates.count(',') <> 1:
+				elif coordinates.count(',') != 1:
 					print('Not a proper coordinate string.')
 					continue
 				else:
@@ -92,8 +107,8 @@ class AutorunNode:
 					try:
 						x = float(xy[0])
 						y = float(xy[1])
-						self.gripper.grab()
-						self.navigate_to_point(x, y)
+						self.gripper[self.robot_ids[0]].grab()
+						self.navigate_to_point(self.robot_ids[0], x, y)
 						self.continue_run = False
 					except ValueError:
 						print('Not a proper coordinate string.')
@@ -103,7 +118,8 @@ class AutorunNode:
 			pass
 		
 	def gui_mode(self):
-		self.win.canvas.bind("<Button-1>", self.window_clicked)
+		self.win.canvas.bind("<Button-1>", lambda event, arg=1: self.window_clicked(event, arg))
+		self.win.canvas.bind("<Button-2>", lambda event, arg=2: self.window_clicked(event, arg))
 		try:
 			while not rospy.is_shutdown():
 				print('=========================================')
@@ -117,25 +133,23 @@ class AutorunNode:
 			print('Node terminated')
 			pass
 	
-	def window_clicked(self, event):
+	def window_clicked(self, i, event):
 		x, y = self.win.reverse_transform(event.x, event.y)
 		self.win.display_destination(event.x, event.y)
-		self.gripper.grab()
-		self.continue_run = True
-		self.navigate_to_point(x, y)
-		print('=========================================')
-		print('ROS Auto-Navigation Node')
-		print('\n')
-		print('Click target location on map to navigate...')
-		print('Press Enter to quit')
+		self.continue_run[i] = False
+		self.threads[i].join()
+		self.gripper[i].grab()
+		self.continue_run[i] = True
+		self.threads[i] = threading.Thread(target=self.navigate_to_point, args=(i, x, y))
+		self.threads[i].start()
 			
-	def navigate_to_point(self, target_x, target_y):
+	def navigate_to_point(self, i, target_x, target_y):
 		nodes = self.data.select_nodes()
 		start = -1
 		end = -1
 		d_min = float('inf')
 		for node in nodes:
-			d = math.sqrt((nodes[node][1] - self.nav.cur_y) ** 2 + (nodes[node][0] - self.nav.cur_x) ** 2)
+			d = math.sqrt((nodes[node][1] - self.nav[i].cur_y) ** 2 + (nodes[node][0] - self.nav[i].cur_x) ** 2)
 			if d < d_min:
 				d_min = d
 				start = node
@@ -147,90 +161,67 @@ class AutorunNode:
 				end = node
 	
 		path = self.dij.get_path(start, end)
-		self.continue_run = True
-		points = map(lambda node: nodes[node], path)
+		self.continue_run[i] = True
+		points = map(lambda n: nodes[n], path)
 		for point in points:
-			if self.continue_run:
-				self.nav.set_target(point[0], point[1])
-				self.navigate(1)
+			if self.continue_run[i]:
+				self.nav[i].set_target(point[0], point[1])
+				self.navigate(i, 1)
 			else:
 				break
-		if self.continue_run:
-			self.nav.set_target(target_x, target_y)
-			self.navigate(2)
-		self.continue_run = False
+		if self.continue_run[i]:
+			self.nav[i].set_target(target_x, target_y)
+			self.navigate(i, 2)
+		self.continue_run[i] = False
 		
-	def navigate(self, status):
-		while self.continue_run and not rospy.is_shutdown():
-			output = self.nav.wait_next(status)
-			self.win.update(self.nav.cur_x, self.nav.cur_y, self.nav.cur_w)
+	def navigate(self, i, status):
+		while self.continue_run[i] and not rospy.is_shutdown():
+			output = self.nav[i].wait_next(status)
+			self.win.update(i, self.nav[i].cur_x, self.nav[i].cur_y, self.nav[i].cur_w)
 			if output == 0:
 				print('Halt')
-				self.move.halt()
+				self.move[i].halt()
 			elif output == 1:
 				print('Forward')
-				self.move.forward()
+				self.move[i].forward()
 			elif output == 2:
 				print('Turn left')
-				self.move.turn_left()
+				self.move[i].turn_left()
 			elif output == 3:
 				print('Turn right')
-				self.move.turn_right()
+				self.move[i].turn_right()
 			elif output == 4:
 				print('Advance left')
-				self.move.advance_left()
+				self.move[i].advance_left()
 			elif output == 5:
 				print('Advance right')
-				self.move.advance_right()
+				self.move[i].advance_right()
 			elif output == 6:
-				print('Turn around')
-				self.turn_around()
+				print('Turn right')
+				self.move[i].turn_right()
 			elif output == 9:
 				print('Arrive at node, continue')
-				break;
+				break
 			elif output == 10:
 				print('Arrive')
-				self.move.halt()
-				self.gripper.grab()
+				self.move[i].halt()
+				self.gripper[i].grab()
 				rospy.sleep(1)
-				self.gripper.release()
+				self.gripper[i].release()
 				print('Exit Auto navigation')
 				break
 			self.r.sleep()
-
-	def turn_around(self):
-		try:
-			odometry = rospy.wait_for_message('odom', Odometry, 0.5)
-			init_angle = math.acos(odometry.pose.pose.orientation.w) * 2
-			if odometry.pose.pose.orientation.z < 0:
-				init_angle = -init_angle
-			cur_angle = init_angle
-			while abs(cur_angle + init_angle) > 0.05 and not rospy.is_shutdown():
-				self.move.turn_left()
-				self.r.sleep()
-				try:
-					odometry = rospy.wait_for_message('odom', Odometry, 0.5)
-					cur_angle = math.acos(odometry.pose.pose.orientation.w) * 2
-					if odometry.pose.pose.orientation.z < 0:
-						cur_angle = -cur_angle
-				except rospy.exceptions.ROSException:
-					print('Receive info timeout')
-					print('Halt')
-					self.move.halt()
-		except rospy.exceptions.ROSException:
-			print('Receive info timeout')
-			print('Halt')
 			
-	def pick_up_item(self):
-		self.joints.pick()
+	def pick_up_item(self, i):
+		self.joints[i].pick()
 		rospy.sleep(1)
-		self.gripper.grab()
+		self.gripper[i].grab()
 		rospy.sleep(1)
-		self.joints.hold()
+		self.joints[i].hold()
 
-	def drop_item(self):
-		self.joints.pick()
+	def drop_item(self, i):
+		self.joints[i].pick()
 		rospy.sleep(1)
-		self.gripper.release()
+		self.gripper[i].release()
 		rospy.sleep(1)
-		self.joints.neutral()
+		self.joints[i].neutral()

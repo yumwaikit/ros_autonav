@@ -4,10 +4,11 @@ import math
 import numpy
 from select_data import DataSelect
 
+
 class Dijkstra:
 	def __init__(self, graph):
 		self.graph = graph
-		self.nodes = numpy.unique(self.graph[:,:2])
+		self.nodes = numpy.unique(self.graph[:, :2])
 		
 	def get_path(self, start, end):
 		distances = {}
@@ -21,7 +22,7 @@ class Dijkstra:
 				distances[i] = float('inf')
 			prev[i] = -1
 		
-		while not end in visited:
+		while end not in visited:
 			for path in self.graph:
 				d = math.sqrt((path[5] - path[4]) ** 2 + (path[3] - path[2]) ** 2)
 				if path[0] == cur and distances[cur] + d < distances[path[1]]:
@@ -32,15 +33,15 @@ class Dijkstra:
 					prev[path[0]] = cur
 			visited.append(cur)
 			
-			not_visited = {k : v for k, v in distances.iteritems() if not k in visited}
+			not_visited = {k : v for k, v in distances.iteritems() if k not in visited}
 			if len(not_visited) > 0:
-				cur = min(not_visited, key = not_visited.get)
+				cur = min(not_visited, key=not_visited.get)
 			else:
 				break
 		
 		path = [end]
 		cur = end
-		while prev[cur] <> -1:
+		while prev[cur] != -1:
 			cur = prev[cur]
 			path.insert(0, cur)
 		return path

@@ -9,10 +9,11 @@ from std_msgs.msg import Bool
 from std_msgs.msg import Float64MultiArray
 from rospy.numpy_msg import numpy_msg
 
-class realsense_node:
+
+class RealsenseNode:
 	def __init__(self):
-		self.pose_publisher = rospy.Publisher('rs_pose', Float64MultiArray, queue_size = 1)
-		self.depth_publisher = rospy.Publisher('rs_depth', Bool, queue_size = 1)
+		self.pose_publisher = rospy.Publisher('rs_pose', Float64MultiArray, queue_size=1)
+		self.depth_publisher = rospy.Publisher('rs_depth', Bool, queue_size=1)
 		#self.color_publisher = rospy.Publisher('rs_color', numpy_msg(Int32), queue_size = 1)
 		rospy.init_node('realsense_node')
 		
@@ -84,9 +85,10 @@ class realsense_node:
 		bottom = depth_array[240:,200:]
 		return numpy.any((bottom > 0) & (bottom < 180))
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
 	try:
-		node = realsense_node()
+		node = RealsenseNode()
 		node.execute()
 	except rospy.ROSInterruptException:
 		pass
