@@ -1,4 +1,13 @@
 <launch>
-	<include file="$(find turtlebot3_bringup)/launch/turtlebot3_robot.launch" />
-	<node pkg="ros_autonav" type="ros_autonav" name="realsense_node.py" output="screen" />
+    <remap from="reset" to="/$(env ROBOT_ID)/reset"/>
+    <remap from="cmd_vel" to="/$(env ROBOT_ID)/cmd_vel"/>
+    <remap from="joint_trajectory_point" to="/$(env ROBOT_ID)/joint_trajectory_point"/>
+    <remap from="gripper_position" to="/$(env ROBOT_ID)/gripper_position"/>
+    <remap from="scan" to="/$(env ROBOT_ID)/scan"/>
+    <remap from="odom" to="/$(env ROBOT_ID)/odom"/>
+    <remap from="rs_reset" to="/$(env ROBOT_ID)/rs_reset"/>
+    <remap from="rs_pose" to="/$(env ROBOT_ID)/rs_pose"/>
+    <remap from="rs_depth" to="/$(env ROBOT_ID)/rs_depth"/>
+    <include file="$(find turtlebot3_bringup)/launch/turtlebot3_robot.launch" />
+    <node pkg="ros_autonav" type="ros_autonav" name="realsense_node.py" output="screen" />
 </launch>
