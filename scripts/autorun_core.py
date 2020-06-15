@@ -6,7 +6,6 @@ import threading
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import Empty
-from nav_msgs.msg import Odometry
 from movements import Movement
 from manipulations import Joints
 from manipulations import Gripper
@@ -17,8 +16,7 @@ from autorun_gui import Controller
 
 
 class AutorunNode:
-	def __init__(self, robot_ids):
-		self.robot_ids = robot_ids
+	def __init__(self):
 		rospy.init_node('autorun_node')
 		self.r = rospy.Rate(10)
 
@@ -32,10 +30,11 @@ class AutorunNode:
 		self.threads = {}
 		self.win = None
 		self.data = DataSelect()
+		self.robot_ids = self.data.select_robots()
 		self.dij = Dijkstra(self.data.select_graph())
 		self.track_device = 2
 		
-		for i in robot_ids:
+		for i in self.robot_ids.keys():
 			self.reset_publisher[i] = rospy.Publisher('/' + str(i) + '/reset', Empty, queue_size=5)
 			self.rs_reset_publisher[i] = rospy.Publisher('/' + str(i) + '/rs_reset', Empty, queue_size=5)
 
@@ -52,7 +51,7 @@ class AutorunNode:
 			arg = raw_input('Press Enter to start calibration.')
 			self.win = Controller('OfficeMap.jpg', self.data.select_graph(), self.robot_ids)
 
-			for i in self.robot_ids:
+			for i in self.robot_ids.keys():
 				self.threads[i] = threading.Thread(target=self.init_robot, args=i)
 				self.threads[i].start()
 			for i, t in self.threads:
@@ -82,8 +81,9 @@ class AutorunNode:
 		print('\n')
 		try:
 			while not rospy.is_shutdown():
-				self.nav[self.robot_ids[0]].wait_next(0)
-				self.win.update(self.nav[self.robot_ids[0]].cur_x, self.nav[self.robot_ids[0]].cur_y, self.nav[self.robot_ids[0]].cur_w)
+				nav = self.nav[self.robot_ids.keys()[0]]
+				nav.wait_next(0)
+				self.win.update(nav.cur_x, nav.cur_y, nav.cur_w)
 				self.r.sleep()
 		except rospy.ROSInterruptException:
 			print('Node terminated')
@@ -107,8 +107,8 @@ class AutorunNode:
 					try:
 						x = float(xy[0])
 						y = float(xy[1])
-						self.gripper[self.robot_ids[0]].grab()
-						self.navigate_to_point(self.robot_ids[0], x, y)
+						self.gripper[self.robot_ids.keys()[0]].grab()
+						self.navigate_to_point(self.robot_ids.keys()[0], x, y)
 						self.continue_run = False
 					except ValueError:
 						print('Not a proper coordinate string.')

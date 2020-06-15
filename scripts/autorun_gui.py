@@ -7,6 +7,7 @@ from PIL import Image, ImageTk
 
 class Controller:
 	def __init__(self, image_file, graph, robot_ids):
+		self.robot_ids = robot_ids
 		self.offset_x = 900
 		self.offset_y = 1473
 		self.scale = 125.2
@@ -26,17 +27,9 @@ class Controller:
 		self.dest_size = 15.0
 		self.cursor = {}
 		self.dest = {}
-		for i in robot_ids:
+		for i, colors in self.robot_ids:
 			x, y = self.transform(0, 0)
-			if i == 1:
-				color = 'red'
-			elif i == 2:
-				color = 'blue'
-			elif i == 3:
-				color = 'yellow'
-			else:
-				color = 'green'
-			self.cursor[i] = self.canvas.create_polygon([0, 0, 0, 0, 0, 0], fill=color)
+			self.cursor[i] = self.canvas.create_polygon([0, 0, 0, 0, 0, 0], fill=colors[0])
 			self.dest[i] = -1
 		
 	def update(self, i, x, y, w):
@@ -67,15 +60,7 @@ class Controller:
 		x2 = x + self.dest_size / 4
 		y1 = y - self.dest_size
 		if self.dest[i] == -1:
-			if i == 1:
-				color = 'magenta'
-			elif i == 2:
-				color = 'cyan'
-			elif i == 3:
-				color = 'green'
-			else:
-				color = 'yellow'
-			self.dest[i] = self.canvas.create_polygon([x, y, x1, y1, x2, y1], fill=color)
+			self.dest[i] = self.canvas.create_polygon([x, y, x1, y1, x2, y1], fill=self.robot_ids[i][1])
 		else:
 			self.canvas.coords(self.dest[i], x, y, x1, y1, x2, y1)
 			

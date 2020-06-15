@@ -21,7 +21,12 @@ class DataSelect:
 			return numpy.array(rows)
 		except pymssql.ProgrammingError:
 			return None
-		
+
+	def select_robots(self):
+		robots = self.select_db('''select id, cursor_color, target_color from Robots 
+							where (enable is null or enable = 'True')''')
+		return {row[0]: (row[1], row[2]) for row in robots}
+
 	def select_graph(self):
 		return self.select_db('''select p.a, p.b, n1.x as xa, n1.y as ya, n2.x as xb, n2.y as yb from Paths as p 
 							left outer join Nodes as n1 on p.a = n1.id 
