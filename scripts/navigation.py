@@ -9,7 +9,7 @@ from nav_msgs.msg import Odometry
 
 
 class Navigation:
-    def __init__(self, i, track_device):
+    def __init__(self, i, offset_x, offset_y, track_device):
         while not rospy.is_shutdown():
             try:
                 self.robot_id = i
@@ -41,6 +41,8 @@ class Navigation:
                 self.cur_x = 0
                 self.cur_y = 0
                 self.cur_w = 0
+                self.offset_x = offset_x
+                self.offset_y = offset_y
                 self.target_x = 0
                 self.target_y = 0
                 self.target_w = 0
@@ -133,8 +135,8 @@ class Navigation:
         return 4  # turn_around
 
     def navigate(self, laser_scan, rs_scan, status):
-        dy = self.target_y - self.cur_y
-        dx = self.target_x - self.cur_x
+        dy = self.target_y - self.cur_y - self.offset_x
+        dx = self.target_x - self.cur_x - self.offset_y
         print('Robot ' + str(self.robot_id) + ': remaining: (' + str(dy) + ', ' + str(dx) + ')')
 
         if status == 1 and abs(dy) < 0.5 and abs(dx) < 0.5:
@@ -245,8 +247,8 @@ class Navigation:
             elif self.cur_w > math.pi:
                 self.cur_w = self.cur_w - math.pi * 2
 
-            print('Robot ' + str(self.robot_id) + ': Current position: (' + str(self.cur_x) + ', ' + str(self.cur_y) +
-                  ')')
+            print('Robot ' + str(self.robot_id) + ': Current position: (' + str(self.cur_x + self.offset_x) + ', '
+                  + str(self.cur_y + self.offset_y) + ')')
             print('Robot ' + str(self.robot_id) + ': Current orientation: ' + str(self.cur_w / math.pi * 180))
 
             rs_scan = rospy.wait_for_message('/' + str(self.robot_id) + '/rs_depth', Bool, 0.5)

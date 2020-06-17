@@ -27,9 +27,9 @@ class Controller:
 		self.dest_size = 15.0
 		self.cursor = {}
 		self.dest = {}
-		for i, colors in self.robot_ids:
+		for i in self.robot_ids.keys():
 			x, y = self.transform(0, 0)
-			self.cursor[i] = self.canvas.create_polygon([0, 0, 0, 0, 0, 0], fill=colors[0])
+			self.cursor[i] = self.canvas.create_polygon([0, 0, 0, 0, 0, 0], fill=self.robot_ids[i][2])
 			self.dest[i] = -1
 		
 	def update(self, i, x, y, w):
@@ -60,7 +60,7 @@ class Controller:
 		x2 = x + self.dest_size / 4
 		y1 = y - self.dest_size
 		if self.dest[i] == -1:
-			self.dest[i] = self.canvas.create_polygon([x, y, x1, y1, x2, y1], fill=self.robot_ids[i][1])
+			self.dest[i] = self.canvas.create_polygon([x, y, x1, y1, x2, y1], fill=self.robot_ids[i][3])
 		else:
 			self.canvas.coords(self.dest[i], x, y, x1, y1, x2, y1)
 			

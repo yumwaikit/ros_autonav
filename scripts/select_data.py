@@ -23,9 +23,9 @@ class DataSelect:
 			return None
 
 	def select_robots(self):
-		robots = self.select_db('''select id, cursor_color, target_color from Robots 
+		robots = self.select_db('''select id, offset_x, offset_y, cursor_color, target_color from Robots 
 							where (enable is null or enable = 'True')''')
-		return {row[0]: (row[1], row[2]) for row in robots}
+		return {int(row[0]): (float(row[1]), float(row[2]), row[3], row[4]) for row in robots}
 
 	def select_graph(self):
 		return self.select_db('''select p.a, p.b, n1.x as xa, n1.y as ya, n2.x as xb, n2.y as yb from Paths as p 

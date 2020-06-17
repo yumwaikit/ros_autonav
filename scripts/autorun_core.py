@@ -33,6 +33,7 @@ class AutorunNode:
 		self.robot_ids = self.data.select_robots()
 		self.dij = Dijkstra(self.data.select_graph())
 		self.track_device = 2
+		self.mode = -1
 		
 		for i in self.robot_ids.keys():
 			self.reset_publisher[i] = rospy.Publisher('/' + str(i) + '/reset', Empty, queue_size=5)
@@ -52,27 +53,35 @@ class AutorunNode:
 			self.win = Controller('OfficeMap.jpg', self.data.select_graph(), self.robot_ids)
 
 			for i in self.robot_ids.keys():
-				self.threads[i] = threading.Thread(target=self.init_robot, args=i)
+				self.threads[i] = threading.Thread(target=self.init_robot, args=[i])
 				self.threads[i].start()
-			for i, t in self.threads:
-				t.join()
+			for i in self.threads.keys():
+				self.threads[i].join()
+			for i in self.robot_ids.keys():
+				self.win.update(i, self.nav[i].cur_x, self.nav[i].cur_y, self.nav[i].cur_w)
+
+			self.win.window.update_idletasks()
+			self.win.window.update()
 
 			print('Calibration complete.')
 			if arg == 'd':
+				self.mode = 0
 				self.diagnose_mode()
 			elif arg == 'c':
+				self.mode = 1
 				self.command_mode()
 			else:
+				self.mode = 2
 				self.gui_mode()
 			break
 
 	def init_robot(self, i):
 		self.reset_publisher[i].publish(Empty())
 		self.rs_reset_publisher[i].publish(Empty())
+		self.move[i].halt()
 		self.joints[i].neutral()
 		self.gripper[i].release()
-		self.nav[i] = Navigation(i, self.track_device)
-		self.win.update(i, self.nav[i].cur_x, self.nav[i].cur_y, self.nav[i].cur_w)
+		self.nav[i] = Navigation(i, self.robot_ids[i][0], self.robot_ids[i][1], self.track_device)
 			
 	def diagnose_mode(self):
 		print('=========================================')
@@ -83,7 +92,7 @@ class AutorunNode:
 			while not rospy.is_shutdown():
 				nav = self.nav[self.robot_ids.keys()[0]]
 				nav.wait_next(0)
-				self.win.update(nav.cur_x, nav.cur_y, nav.cur_w)
+				self.win.update(self.robot_ids.keys()[0], nav.cur_x + nav.offset_x, nav.cur_y + nav.offset_y, nav.cur_w)
 				self.r.sleep()
 		except rospy.ROSInterruptException:
 			print('Node terminated')
@@ -119,23 +128,25 @@ class AutorunNode:
 		
 	def gui_mode(self):
 		self.win.canvas.bind("<Button-1>", lambda event, arg=1: self.window_clicked(event, arg))
-		self.win.canvas.bind("<Button-2>", lambda event, arg=2: self.window_clicked(event, arg))
+		self.win.canvas.bind("<Button-3>", lambda event, arg=2: self.window_clicked(event, arg))
 		try:
 			while not rospy.is_shutdown():
-				print('=========================================')
-				print('ROS Auto-Navigation Node')
-				print('\n')
-				print('Click target location on map to navigate...')
-				raw_input('Press Enter to quit.')
-				print('Node terminated')
-				break
+				for i in self.robot_ids.keys():
+					self.win.update(i, self.nav[i].cur_x + self.nav[i].offset_x, self.nav[i].cur_y + self.nav[i].offset_y, self.nav[i].cur_w)
+				# print('=========================================')
+				# print('ROS Auto-Navigation Node')
+				# print('\n')
+				# print('Click target location on map to navigate...')
+				# raw_input('Press Enter to quit.')
+				# print('Node terminated')
+				# break
 		except rospy.ROSInterruptException:
 			print('Node terminated')
 			pass
 	
-	def window_clicked(self, i, event):
+	def window_clicked(self, event, i):
 		x, y = self.win.reverse_transform(event.x, event.y)
-		self.win.display_destination(event.x, event.y)
+		self.win.display_destination(i, event.x, event.y)
 		self.continue_run[i] = False
 		self.threads[i].join()
 		self.gripper[i].grab()
@@ -177,7 +188,8 @@ class AutorunNode:
 	def navigate(self, i, status):
 		while self.continue_run[i] and not rospy.is_shutdown():
 			output = self.nav[i].wait_next(status)
-			self.win.update(i, self.nav[i].cur_x, self.nav[i].cur_y, self.nav[i].cur_w)
+			if self.mode != 2:
+				self.win.update(i, self.nav[i].cur_x + self.nav[i].offset_x, self.nav[i].cur_y + self.nav[i].offset_y, self.nav[i].cur_w)
 			if output == 0:
 				print('Halt')
 				self.move[i].halt()
