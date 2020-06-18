@@ -36,10 +36,10 @@ class Controller:
 		new_x, new_y = self.transform(x, y)
 		x1 = new_x - math.sin(w) * self.cursor_size
 		y1 = new_y - math.cos(w) * self.cursor_size
-		x2 = new_x - math.cos(w) * self.cursor_size / 2
-		y2 = new_y + math.sin(w) * self.cursor_size / 2
-		x3 = new_x + math.cos(w) * self.cursor_size / 2
-		y3 = new_y - math.sin(w) * self.cursor_size / 2
+		x2 = new_x - math.cos(w) * self.cursor_size / 3
+		y2 = new_y + math.sin(w) * self.cursor_size / 3
+		x3 = new_x + math.cos(w) * self.cursor_size / 3
+		y3 = new_y - math.sin(w) * self.cursor_size / 3
 		self.canvas.coords(self.cursor[i], x1, y1, x2, y2, x3, y3)
 		self.window.update_idletasks()
 		self.window.update()
