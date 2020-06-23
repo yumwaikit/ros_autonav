@@ -37,7 +37,7 @@ class RealsenseNode:
 						pose_data = self.grab_pose_frame()
 						if pose_data:
 							array = Float64MultiArray()
-							array.data = [pose_data.translation.z, -pose_data.translation.x, pose_data.rotation.y, pose_data.rotation.w]
+							array.data = [-pose_data.translation.z, -pose_data.translation.x, pose_data.rotation.y, pose_data.rotation.w]
 							self.pose_publisher.publish(array)
 					if self.depth_pipeline:
 						color, depth = self.grab_depth_frame()
@@ -82,8 +82,9 @@ class RealsenseNode:
 		return color, depth
 		
 	def check_ground_obstacle(self, depth_array):
-		bottom = depth_array[240:,200:]
-		return numpy.any((bottom > 0) & (bottom < 180))
+		bottom = depth_array[240:, 200:]
+		c = ((bottom > 10) & (bottom < 180)).sum()
+		return c > 100
 
 
 if __name__ == "__main__":

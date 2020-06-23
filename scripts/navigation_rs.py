@@ -8,22 +8,11 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 
 
-class Navigation:
+class NavigationRs:
     def __init__(self, i, offset_x, offset_y):
         while not rospy.is_shutdown():
             try:
                 self.robot_id = i
-
-                odometry = rospy.wait_for_message('/' + str(i) + '/odom', Odometry, 0.5)
-                pose = odometry.pose.pose
-                self.init_odo_x = pose.position.x
-                self.init_odo_y = pose.position.y
-                self.init_odo_w = math.acos(pose.orientation.w) * 2
-                if pose.orientation.z < 0:
-                    self.init_odo_w = -self.init_odo_w
-                print('Robot ' + str(i) + ': Odometry initial position: (' + str(self.init_odo_x) + ', ' +
-                        str(self.init_odo_y) + ')')
-                print('Robot ' + str(i) + ': Odometry initial orientation: ' + str(self.init_odo_w / math.pi * 180))
 
                 rs_pose = rospy.wait_for_message('/' + str(i) + '/rs_pose', Float64MultiArray, 0.5)
                 data = rs_pose.data
@@ -36,53 +25,33 @@ class Navigation:
                       str(self.init_rs_y) + ')')
                 print('Robot ' + str(i) + ': Realsense initial orientation: ' + str(self.init_rs_w / math.pi * 180))
 
-                self.offset_x = offset_x
-                self.offset_y = offset_y
-                self.offset_odo_x = 0
-                self.offset_odo_y = 0
-                self.offset_rs_x = 0
-                self.offset_rs_y = 0
-
                 self.cur_x = 0
                 self.cur_y = 0
                 self.cur_w = 0
+                self.offset_x = offset_x
+                self.offset_y = offset_y
                 self.target_x = 0
                 self.target_y = 0
                 self.target_w = 0
                 self.turning = 0
                 self.evading = 0
-                self.update_offset = 0
                 print('Robot ' + str(i) + ': Auto navigation Start')
                 break
             except rospy.exceptions.ROSException:
                 rospy.loginfo('Robot ' + str(i) + ': Receive info timeout')
 
-    def absolute_coordinates(self, x, y, track_device):
-        if track_device == 1:
-            init_x = self.init_odo_x
-            init_y = self.init_odo_y
-            w = self.init_odo_w
-        elif track_device == 2:
-            init_x = self.init_rs_x
-            init_y = self.init_rs_y
-            w = self.init_rs_w
-        else:
-            return x, y
+    def absolute_coordinates(self, x, y):
+        init_x = self.init_rs_x
+        init_y = self.init_rs_y
+        w = self.init_rs_w
         new_x = y * math.sin(w) - x * math.cos(w) + init_x
         new_y = y * math.cos(w) + x * math.sin(w) + init_y
         return new_x, new_y
 
-    def relative_coordinates(self, x, y, track_device):
-        if track_device == 1:
-            init_x = self.init_odo_x
-            init_y = self.init_odo_y
-            w = self.init_odo_w
-        elif track_device == 2:
-            init_x = self.init_rs_x
-            init_y = self.init_rs_y
-            w = self.init_rs_w
-        else:
-            return x, y
+    def relative_coordinates(self, x, y):
+        init_x = self.init_rs_x
+        init_y = self.init_rs_y
+        w = self.init_rs_w
         new_x = (x - init_x) * math.cos(-w) + (y - init_y) * math.sin(-w)
         new_y = (y - init_y) * math.cos(-w) - (x - init_x) * math.sin(-w)
         return new_x, new_y
@@ -201,50 +170,21 @@ class Navigation:
         try:
             laser_scan = rospy.wait_for_message('/' + str(self.robot_id) + '/scan', LaserScan, 0.5)
 
-            odometry = rospy.wait_for_message('/' + str(self.robot_id) + '/odom', Odometry, 0.5)
-            pose = odometry.pose.pose
-            cur_odo_x, cur_odo_y = self.relative_coordinates(pose.position.x, pose.position.y, 1)
-            cur_odo_x = cur_odo_x + self.offset_odo_x
-            cur_odo_y = cur_odo_y + self.offset_odo_y
-            cur_odo_w = math.acos(pose.orientation.w) * 2
-            if pose.orientation.z < 0:
-                cur_odo_w = -cur_odo_w
-            if cur_odo_w < -math.pi:
-                cur_odo_w = cur_odo_w + math.pi * 2
-            elif cur_odo_w > math.pi:
-                cur_odo_w = cur_odo_w - math.pi * 2
-            cur_odo_w = cur_odo_w - self.init_odo_w
-
             rs_pose = rospy.wait_for_message('/' + str(self.robot_id) + '/rs_pose', Float64MultiArray, 0.5)
             data = rs_pose.data
-            cur_rs_x, cur_rs_y = self.relative_coordinates(data[0], data[1], 2)
-            cur_rs_x = cur_rs_x + self.offset_rs_x
-            cur_rs_y = cur_rs_y + self.offset_rs_y
-            cur_rs_w = math.acos(data[3]) * 2
+            self.cur_x, self.cur_y = self.relative_coordinates(data[0], data[1])
+            self.cur_w = math.acos(data[3]) * 2
             if data[2] < 0:
-                cur_rs_w = -cur_rs_w
-            if cur_rs_w < -math.pi:
-                cur_rs_w = cur_rs_w + math.pi * 2
-            elif cur_rs_w > math.pi:
-                cur_rs_w = cur_rs_w - math.pi * 2
-            cur_rs_w = cur_rs_w - self.init_rs_w
+                self.cur_w = -self.cur_w
+            self.cur_w = self.cur_w - self.init_rs_w
+            if status == 0:
+                print('Odometry: (' + str(data[0]) + ', ' + str(data[1]) + ', ' + str(data[2]) + ', ' +
+                      str(data[3]) + ')')
 
-            if self.update_offset < 10:
-                self.update_offset = self.update_offset + 1
-            else:
-                dist = math.sqrt((cur_odo_y - cur_rs_y) ** 2 + (cur_odo_x - cur_rs_x) ** 2)
-                dx = cur_odo_x - cur_rs_x
-                dy = cur_odo_y - cur_rs_y
-                if dist < 0.3:
-                    self.offset_rs_x = self.offset_rs_x + dx
-                    self.offset_rs_y = self.offset_rs_y + dy
-                else:
-                    self.offset_odo_x = self.offset_odo_x - dx
-                    self.offset_odo_y = self.offset_odo_y - dy
-                self.update_offset = 0
-            self.cur_x = cur_odo_x
-            self.cur_y = cur_odo_y
-            self.cur_w = (cur_odo_w + cur_rs_w + math.pi * 2) / 2 - math.pi
+            if self.cur_w < -math.pi:
+                self.cur_w = self.cur_w + math.pi * 2
+            elif self.cur_w > math.pi:
+                self.cur_w = self.cur_w - math.pi * 2
 
             print('Robot ' + str(self.robot_id) + ': Current position: (' + str(self.cur_x + self.offset_x) + ', '
                   + str(self.cur_y + self.offset_y) + ')')

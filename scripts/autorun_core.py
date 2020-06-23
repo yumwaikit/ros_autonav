@@ -9,6 +9,8 @@ from std_msgs.msg import Empty
 from movements import Movement
 from manipulations import Joints
 from manipulations import Gripper
+from navigation_odom import NavigationOdom
+from navigation_rs import NavigationRs
 from navigation import Navigation
 from select_data import DataSelect
 from shortest_path import Dijkstra
@@ -32,7 +34,7 @@ class AutorunNode:
 		self.data = DataSelect()
 		self.robot_ids = self.data.select_robots()
 		self.dij = Dijkstra(self.data.select_graph())
-		self.track_device = 2
+		self.track_device = 3
 		self.mode = -1
 		
 		for i in self.robot_ids.keys():
@@ -81,22 +83,33 @@ class AutorunNode:
 		self.move[i].halt()
 		self.joints[i].neutral()
 		self.gripper[i].release()
-		self.nav[i] = Navigation(i, self.robot_ids[i][0], self.robot_ids[i][1], self.track_device)
+		if self.track_device == 1:
+			self.nav[i] = NavigationOdom(i, self.robot_ids[i][0], self.robot_ids[i][1])
+		elif self.track_device == 2:
+			self.nav[i] = NavigationRs(i, self.robot_ids[i][0], self.robot_ids[i][1])
+		elif self.track_device == 3:
+			self.nav[i] = Navigation(i, self.robot_ids[i][0], self.robot_ids[i][1])
 			
 	def diagnose_mode(self):
 		print('=========================================')
 		print('ROS Auto-Navigation Node')
 		print('---------Diagnostic mode')
 		print('\n')
+		for i in self.robot_ids.keys():
+			self.threads[i] = threading.Thread(target=self.diagnose_loop, args=[i])
+			self.threads[i].start()
 		try:
 			while not rospy.is_shutdown():
-				nav = self.nav[self.robot_ids.keys()[0]]
-				nav.wait_next(0)
-				self.win.update(self.robot_ids.keys()[0], nav.cur_x + nav.offset_x, nav.cur_y + nav.offset_y, nav.cur_w)
-				self.r.sleep()
+				for i in self.robot_ids.keys():
+					self.win.update(i, self.nav[i].cur_x + self.nav[i].offset_x, self.nav[i].cur_y + self.nav[i].offset_y, self.nav[i].cur_w)
+					self.r.sleep()
 		except rospy.ROSInterruptException:
 			print('Node terminated')
 			pass
+
+	def diagnose_loop(self, i):
+		while not rospy.is_shutdown():
+			self.nav[i].wait_next(0)
 		
 	def command_mode(self):
 		try:
@@ -133,6 +146,7 @@ class AutorunNode:
 			while not rospy.is_shutdown():
 				for i in self.robot_ids.keys():
 					self.win.update(i, self.nav[i].cur_x + self.nav[i].offset_x, self.nav[i].cur_y + self.nav[i].offset_y, self.nav[i].cur_w)
+				self.r.sleep()
 				# print('=========================================')
 				# print('ROS Auto-Navigation Node')
 				# print('\n')
@@ -172,6 +186,7 @@ class AutorunNode:
 				end = node
 	
 		path = self.dij.get_path(start, end)
+		print('Route: ' + str(path))
 		self.continue_run[i] = True
 		points = map(lambda n: nodes[n], path)
 		for point in points:
@@ -209,7 +224,7 @@ class AutorunNode:
 				print('Advance right')
 				self.move[i].advance_right()
 			elif output == 6:
-				print('Turn right')
+				print('Stuck! Turn right')
 				self.move[i].turn_right()
 			elif output == 9:
 				print('Arrive at node, continue')
